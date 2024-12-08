@@ -1,0 +1,72 @@
+import logging
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from together import Together  # Assuming the Together SDK is already installed.
+
+# Initialize the Together client
+client = Together()
+
+# Set up logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+)
+
+# Define the image generation function
+async def generate_image(prompt: str):
+    try:
+        response = client.images.generate(
+            prompt=prompt,
+            model="black-forest-labs/FLUX.1-dev",
+            width=1024,
+            height=768,
+            steps=28,
+            n=1,
+            response_format="b64_json",
+        )
+        image_data = response['data'][0]['b64_json']
+        return image_data
+    except Exception as e:
+        logging.error(f"Error generating image: {e}")
+        return None
+
+# Start command handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Hi! Send me a prompt, and I'll generate an image for you!"
+    )
+
+# Prompt message handler
+async def handle_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = update.message.text
+    await update.message.reply_text("Generating your image...")
+
+    image_data = await generate_image(prompt)
+    if image_data:
+        with open("generated_image.jpg", "wb") as f:
+            f.write(base64.b64decode(image_data))
+
+        await update.message.reply_photo(
+            photo=open("generated_image.jpg", "rb"),
+            caption=f"Here is your image for: {prompt}",
+        )
+    else:
+        await update.message.reply_text("Failed to generate the image. Try again later.")
+
+# Main function to start the bot
+def main():
+    # Replace 'YOUR_TELEGRAM_BOT_TOKEN' with your actual bot token
+    bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
+    
+    app = Application.builder().token(bot_token).build()
+
+    # Register handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_prompt))
+
+    # Start the bot
+    logging.info("Starting the bot...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
